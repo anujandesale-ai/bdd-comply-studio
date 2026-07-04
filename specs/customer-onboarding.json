@@ -1,0 +1,60 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Customer Onboarding API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/customers": {
+      "get": {
+        "summary": "List customer records",
+        "responses": {
+          "200": {
+            "description": "Customers returned",
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "customerId": "C001",
+                    "name": "Alice Johnson",
+                    "email": "alice@example.com"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a customer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Diana Prince",
+                "email": "diana@example.com",
+                "phone": "+1-555-0102",
+                "riskTier": "standard"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer created",
+            "content": {
+              "application/json": {
+                "example": {
+                  "customerId": "C003",
+                  "name": "Diana Prince",
+                  "email": "diana@example.com"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Sample Banking API",
+    "version": "1.0.0",
+    "description": "OpenAPI specification for the sample banking microservice."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8081"
+    }
+  ],
+  "paths": {
+    "/accounts": {
+      "get": {
+        "summary": "List all bank accounts",
+        "description": "Returns a list of customer accounts.",
+        "responses": {
+          "200": {
+            "description": "A list of accounts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "accountId": {"type": "string", "example": "A001"},
+                      "owner": {"type": "string", "example": "Alice"},
+                      "balance": {"type": "number", "format": "float", "example": 2450.75},
+                      "currency": {"type": "string", "example": "USD"}
+                    },
+                    "required": ["accountId", "owner", "balance", "currency"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new account",
+        "description": "Creates a new bank account for a customer.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "owner": {"type": "string", "example": "Charlie"},
+                  "currency": {"type": "string", "example": "USD"},
+                  "initialDeposit": {"type": "number", "format": "float", "example": 500.0}
+                },
+                "required": ["owner", "currency", "initialDeposit"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": {"type": "string", "example": "A003"},
+                    "owner": {"type": "string", "example": "Charlie"},
+                    "balance": {"type": "number", "example": 500.0},
+                    "currency": {"type": "string", "example": "USD"}
+                  },
+                  "required": ["accountId", "owner", "balance", "currency"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{accountId}": {
+      "get": {
+        "summary": "Retrieve account details",
+        "description": "Returns details for a single account.",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "example": "A001"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": {"type": "string", "example": "A001"},
+                    "owner": {"type": "string", "example": "Alice"},
+                    "balance": {"type": "number", "example": 2450.75},
+                    "currency": {"type": "string", "example": "USD"}
+                  },
+                  "required": ["accountId", "owner", "balance", "currency"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "summary": "List banking products",
+        "description": "Returns available banking products.",
+        "responses": {
+          "200": {
+            "description": "Product list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "productId": {"type": "string", "example": "P001"},
+                      "name": {"type": "string", "example": "Savings Account"},
+                      "category": {"type": "string", "example": "Deposit"}
+                    },
+                    "required": ["productId", "name", "category"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/loans": {
+      "get": {
+        "summary": "Search loan offers",
+        "description": "Returns loan offers by type.",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {"type": "string", "example": "personal"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Loan offers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "offerId": {"type": "string", "example": "L001"},
+                      "type": {"type": "string", "example": "personal"},
+                      "rate": {"type": "number", "example": 7.5},
+                      "termMonths": {"type": "integer", "example": 36}
+                    },
+                    "required": ["offerId", "type", "rate", "termMonths"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

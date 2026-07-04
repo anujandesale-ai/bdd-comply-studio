@@ -2,6 +2,11 @@
 __pycache__/
 *.py[codz]
 *$py.class
+.bdd-comply-studio-venv
+sample_logs.txt
+sample_logs_no_pii.txt
+review.txt
+
 
 # C extensions
 *.so

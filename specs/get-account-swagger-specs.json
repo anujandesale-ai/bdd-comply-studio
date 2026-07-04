@@ -1,0 +1,30 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Your API Name",
+    "description": "A description of what your API does",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/example-endpoint": {
+      "get": {
+        "summary": "Retrieves example data",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

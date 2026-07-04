@@ -1,0 +1,62 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Transaction API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/transactions": {
+      "get": {
+        "summary": "List transactions",
+        "responses": {
+          "200": {
+            "description": "Transactions returned",
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "transactionId": "T1001",
+                    "accountId": "A001",
+                    "amount": 1500.0,
+                    "currency": "USD"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a transaction",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "accountId": "A002",
+                "amount": 12500.0,
+                "currency": "USD"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Transaction created",
+            "content": {
+              "application/json": {
+                "example": {
+                  "transactionId": "T1003",
+                  "accountId": "A002",
+                  "amount": 12500.0,
+                  "currency": "USD",
+                  "reviewRequired": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

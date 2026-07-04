@@ -1,0 +1,30 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Products API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/products": {
+      "get": {
+        "summary": "List products",
+        "responses": {
+          "200": {
+            "description": "Products returned",
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "productId": "P001",
+                    "name": "Savings Account",
+                    "category": "Deposit"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

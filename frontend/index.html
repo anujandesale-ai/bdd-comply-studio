@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finance Content Creator UI</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f7fb; color: #17202a; }
+    .container { max-width: 960px; margin: 32px auto; padding: 24px; background: #ffffff; border-radius: 12px; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08); }
+    h1, h2 { margin-top: 0; }
+    .button-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    button { padding: 12px 16px; border: none; border-radius: 10px; background: #2563eb; color: white; cursor: pointer; font-weight: 600; }
+    button.secondary { background: #4b5563; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    pre { white-space: pre-wrap; background: #111827; color: #f9fafb; padding: 16px; border-radius: 10px; overflow-x: auto; }
+    .panel { margin-top: 24px; }
+    .audit-item { margin-bottom: 10px; padding: 10px; background: #eef2ff; border-radius: 8px; }
+    .status-ok { color: #047857; font-weight: 700; }
+    .status-error { color: #b91c1c; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Finance Technical Content Creator</h1>
+    <p>Use the UI to simulate banking API actions, generate and execute BDDs, and run compliance agents. Audit trail updates automatically.</p>
+
+    <div class="panel">
+      <h2>Banking Service APIs</h2>
+      <div class="button-grid">
+        <button onclick="runAction('/api/accounts', 'GET', 'Fetch accounts')">Fetch Accounts</button>
+        <button onclick="runAction('/api/account/A001', 'GET', 'Fetch account A001')">Fetch Account A001</button>
+        <button onclick="createAccount()">Create Account</button>
+        <button onclick="runAction('/api/products', 'GET', 'Fetch products')">Fetch Products</button>
+        <button onclick="runAction('/api/loans?type=personal', 'GET', 'Search personal loans')">Search Loans</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Agent Actions</h2>
+      <div class="button-grid">
+        <button onclick="toggleBddPanel()" class="secondary">Generate BDDs</button>
+        <button onclick="runAction('/api/execute-bdd', 'GET', 'Execute generated BDDs')">BDD Execution Agent</button>
+        <button onclick="runAction('/api/validate-pii', 'GET', 'Validate PII on both logs')">PII Validation Agent</button>
+        <button onclick="runAction('/api/validate-fca', 'GET', 'Validate FCA')">FCA Compliance Agent</button>
+      </div>
+      <div id="bdd-generator-panel" style="display:none; margin-top:16px; padding:16px; border:1px solid #dbeafe; border-radius:12px; background:#eef2ff;">
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <span style="font-weight:700;">Select OpenAPI file to generate BDDs</span>
+          <input type="file" id="openapi-file" accept=".json" />
+          <div style="font-size:0.95rem; color:#475569;">Leave file empty to generate BDDs from the <strong>specs/</strong> directory if available, otherwise use sample banking APIs.</div>
+          <button onclick="submitBddGeneration()">Generate BDDs</button>
+        </div>
+      </div>
+      <div id="execution-report-panel" style="display:none; margin-top:16px; padding:16px; border:1px solid #dbeafe; border-radius:12px; background:#eef2ff;">
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <span style="font-weight:700;">BDD Execution Report</span>
+          <div id="execution-report-link">No execution report available yet.</div>
+        </div>
+      </div>
+      <div id="fca-report-panel" style="display:none; margin-top:16px; padding:16px; border:1px solid #dbeafe; border-radius:12px; background:#eef2ff;">
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <span style="font-weight:700;">FCA Validation Report</span>
+          <div id="fca-report-link">No FCA report available yet.</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Log Preview</h2>
+      <pre id="sample-logs">No log preview run yet.</pre>
+    </div>
+    <div class="panel">
+      <h2>Agent / API Output</h2>
+      <pre id="response">No actions yet.</pre>
+    </div>
+  </div>
+
+  <script>
+    async function runAction(path, method = 'GET', label = '') {
+      const responseEl = document.getElementById('response');
+      const logEl = document.getElementById('sample-logs');
+      responseEl.textContent = 'Running ' + label + '...';
+      logEl.textContent = 'No log preview available for this action.';
+      hideSection('execution-report-panel');
+      hideSection('fca-report-panel');
+
+      try {
+        const response = await fetch(path, { method });
+        const data = await response.json();
+        responseEl.textContent = JSON.stringify({ label, status: response.status, data }, null, 2);
+        await renderValidationLogs(data);
+      } catch (error) {
+        responseEl.textContent = 'Error: ' + error.message;
+      }
+    }
+
+    function toggleBddPanel() {
+      const panel = document.getElementById('bdd-generator-panel');
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function submitBddGeneration() {
+      const responseEl = document.getElementById('response');
+      const fileInput = document.getElementById('openapi-file');
+      responseEl.textContent = 'Generating BDDs...';
+      const body = {};
+
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        body.filename = file.name;
+        body.content = await file.text();
+      }
+
+      const response = await fetch('/api/generate-bdd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+      responseEl.textContent = JSON.stringify({ label: fileInput.files.length ? 'Generate BDDs from OpenAPI' : 'Generate default BDDs', status: response.status, data }, null, 2);
+      await renderValidationLogs(data);
+      document.getElementById('bdd-generator-panel').style.display = 'none';
+    }
+
+    async function renderValidationLogs(response) {
+      const logEl = document.getElementById('sample-logs');
+      if (!response) {
+        logEl.textContent = 'No log preview result available.';
+        return;
+      }
+
+      const lines = [];
+      if (response.validation) {
+        response.validation.results.forEach(result => {
+          lines.push(`=== ${result.path} ===`);
+          lines.push(result.text);
+          lines.push(`-- findings: ${result.findings.length}`);
+          if (result.messages && result.messages.length) {
+            lines.push(`-- messages: ${result.messages.join(' | ')}`);
+          }
+          lines.push('');
+        });
+        lines.push('=== PII validation summary ===');
+        lines.push(JSON.stringify(response.validation.summary, null, 2));
+      }
+
+      if (response.fcaResults || response.violations) {
+        lines.push('=== FCA validation details ===');
+        const fcaResults = response.fcaResults || response.violations;
+        if (Array.isArray(fcaResults.results)) {
+          fcaResults.results.forEach(result => {
+            lines.push(`* ${result.ruleId}: ${result.description}`);
+            lines.push(`  event type: ${result.event.type}`);
+            lines.push(`  passed: ${result.passed}`);
+            lines.push(`  reason: ${result.reason}`);
+            lines.push(`  event: ${JSON.stringify(result.event)}`);
+            lines.push('');
+          });
+          lines.push('FCA summary: ' + JSON.stringify(fcaResults.summary, null, 2));
+        } else {
+          lines.push(JSON.stringify(fcaResults, null, 2));
+        }
+        if (response.printedLogs) {
+          lines.push('');
+          lines.push('=== FCA agent output ===');
+          lines.push(response.printedLogs);
+        }
+      }
+
+      if (response.reportUrl) {
+        lines.push('=== BDD Execution Report ===');
+        lines.push(`Report available at: ${response.reportUrl}`);
+        showSection('execution-report-panel');
+        updateExecutionReportLink(response.reportUrl);
+      }
+
+      if (response.fcaReportUrl) {
+        lines.push('=== FCA Validation Report ===');
+        lines.push(`Report available at: ${response.fcaReportUrl}`);
+        showSection('fca-report-panel');
+        updateFcaReportLink(response.fcaReportUrl);
+      }
+
+      if (response.llmSummary) {
+        lines.push('=== LLM Summary ===');
+        lines.push(response.llmSummary);
+      }
+
+      const auditItems = await loadAuditTrail();
+      if (auditItems.length) {
+        lines.push('=== Audit Trail ===');
+        auditItems.forEach(item => {
+          lines.push(`${item.action} — ${item.status}: ${item.message}`);
+        });
+      }
+
+      logEl.textContent = lines.join('\n');
+    }
+
+    async function loadAuditTrail() {
+      try {
+        const response = await fetch('/api/audit-trail');
+        const data = await response.json();
+        return data.auditTrail || [];
+      } catch (error) {
+        return [{ action: 'Audit fetch failed', status: 'error', message: error.message }];
+      }
+    }
+
+    function updateExecutionReportLink(reportUrl) {
+      const reportDiv = document.getElementById('execution-report-link');
+      reportDiv.innerHTML = `<a href="${reportUrl}" target="_blank">Open BDD execution report</a>`;
+    }
+
+    function updateFcaReportLink(reportUrl) {
+      const reportDiv = document.getElementById('fca-report-link');
+      reportDiv.innerHTML = `<a href="${reportUrl}" target="_blank">Open FCA validation report</a>`;
+    }
+
+    function showSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      section.style.display = 'block';
+    }
+
+    function hideSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      section.style.display = 'none';
+    }
+
+    async function createAccount() {
+      const body = { owner: 'Charlie', currency: 'USD', initialDeposit: 500.0 };
+      const responseEl = document.getElementById('response');
+      responseEl.textContent = 'Creating account...';
+      try {
+        const response = await fetch('/api/create-account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await response.json();
+        responseEl.textContent = JSON.stringify({ label: 'Create account', status: response.status, data }, null, 2);
+      } catch (error) {
+        responseEl.textContent = 'Error: ' + error.message;
+      }
+      await refreshAudit();
+    }
+
+    async function refreshAudit() {
+      // No separate audit panel: audit trail is rendered inside log preview.
+    }
+  </script>
+</body>
+</html>
