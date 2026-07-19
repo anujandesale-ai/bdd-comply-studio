@@ -6,7 +6,10 @@ __pycache__/
 sample_logs.txt
 sample_logs_no_pii.txt
 review.txt
-
+reports/
+uploads/
+features/
+tmp_features/
 
 # C extensions
 *.so

@@ -9,36 +9,49 @@ This sample project contains:
 
 ## Getting started
 
-1. Run the sample banking service:
+### 1. Activate the virtual environment
+
+From the project root:
 
 ```bash
-cd /Users/anujadesale/savings-hackthon/finance-technical-content-creator
+cd /Users/anujadesale/Documents/agentic-ai/capstone-projects/bdd-comply-studio
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Start the backend service
+
+```bash
 python3 backend/sample_banking_service.py
 ```
 
-2. Start the frontend simulation UI:
+This runs the sample banking API on port 8081.
+
+### 3. Start the Streamlit frontend
+
+In a second terminal, with the same virtual environment activated:
 
 ```bash
-python3 backend/frontend_server.py
+cd /Users/anujadesale/Documents/agentic-ai/capstone-projects/bdd-comply-studio
+source .venv/bin/activate
+python3 -m streamlit run frontend/streamlit_app.py --server.headless true --server.port 8502
 ```
 
-3. Open your browser to:
+Then open:
 
 ```bash
-http://localhost:8082
+http://localhost:8502
 ```
 
-4. Use the UI buttons to:
+### 4. Use the UI to run the workflow
 
-- fetch accounts and products
-- create an account
-- search loan offers
-- generate Karate BDD feature files
-- execute generated BDDs against the sample service
-- validate PII across both sample logs
-- run FCA compliance validation
+- Upload a Swagger/JSON spec or use the bundled specs
+- Run the full workflow
+- Review generated BDDs and approve them
+- Continue the workflow to generate reports
 
-5. Validate workflows from the command line if desired:
+### 5. Optional: run validation commands directly
 
 ```bash
 python3 backend/bdd_agent.py generate
