@@ -15,8 +15,8 @@ From the project root:
 
 ```bash
 cd /Users/anujadesale/Documents/agentic-ai/capstone-projects/bdd-comply-studio
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .bdd-comply-studio-venv
+source .bdd-comply-studio-venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -34,7 +34,7 @@ In a second terminal, with the same virtual environment activated:
 
 ```bash
 cd /Users/anujadesale/Documents/agentic-ai/capstone-projects/bdd-comply-studio
-source .venv/bin/activate
+source .bdd-comply-studio-venv/bin/activate
 python3 -m streamlit run frontend/streamlit_app.py --server.headless true --server.port 8502
 ```
 
