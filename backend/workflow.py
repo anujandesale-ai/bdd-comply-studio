@@ -160,7 +160,7 @@ class WorkflowOrchestrator:
                 ),
             }
 
-            if not review_approved and user_prompt and not all_specs and not swagger_file and not controller_source:
+            if not review_approved:
                 workflow["status"] = "review_pending"
                 workflow["steps"]["review"] = {"status": "pending", "message": "User review required before execution."}
                 self.last_run = workflow
