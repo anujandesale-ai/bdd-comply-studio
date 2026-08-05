@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -34,6 +35,7 @@ class WorkflowOrchestrator:
         swagger_file: str | None = None,
         all_specs: bool = False,
         controller_source: str | None = None,
+        user_prompt: str | None = None,
     ) -> list[Path]:
         if swagger_file:
             return [Path(swagger_file)]
@@ -42,6 +44,32 @@ class WorkflowOrchestrator:
             return sorted(specs_dir.glob("*.json")) if specs_dir.exists() else []
         if controller_source:
             return []
+
+        prompt_text = (user_prompt or "").strip().lower()
+        specs_dir = ROOT_DIR / "specs"
+        if specs_dir.exists():
+            prompt_keywords = [token for token in re.findall(r"[a-z0-9]+", prompt_text) if len(token) > 2]
+            scored_specs: list[tuple[int, Path]] = []
+            for spec_path in sorted(specs_dir.glob("*.json")):
+                text = spec_path.read_text(encoding="utf-8", errors="ignore").lower()
+                if not prompt_text:
+                    scored_specs.append((0, spec_path))
+                    continue
+                score = 0
+                for keyword in prompt_keywords:
+                    if keyword in text:
+                        score += 3
+                    if keyword in spec_path.stem.lower():
+                        score += 5
+                if score > 0:
+                    scored_specs.append((score, spec_path))
+            if scored_specs:
+                scored_specs.sort(key=lambda item: item[0], reverse=True)
+                best_score, best_spec = scored_specs[0]
+                if best_score > 0:
+                    return [best_spec]
+                return [scored_specs[0][1]]
+
         default_spec = ROOT_DIR / "get-accounts-openapi-specs.yaml"
         if default_spec.exists():
             return [default_spec]
@@ -64,6 +92,7 @@ class WorkflowOrchestrator:
         progress_callback: Callable[[str, str, float], None] | None = None,
         controller_source: str | None = None,
         create_cbs_mock: bool = True,
+        user_prompt: str | None = None,
     ) -> dict[str, Any]:
         started_at = datetime.utcnow().isoformat()
         workflow = {
@@ -77,13 +106,12 @@ class WorkflowOrchestrator:
             controller_path = Path(controller_source) if controller_source else None
             if controller_source and not swagger_file and not all_specs:
                 controller_path = Path(controller_source)
-            elif (ROOT_DIR / "backend" / "sample_banking_service.py").exists():
-                controller_path = ROOT_DIR / "backend" / "sample_banking_service.py"
 
             swagger_paths = self._resolve_swagger_inputs(
                 swagger_file=swagger_file,
                 all_specs=all_specs,
                 controller_source=str(controller_path) if controller_path else None,
+                user_prompt=user_prompt,
             )
             if not swagger_paths and not controller_path:
                 raise WorkflowError("No Swagger/OpenAPI specs were provided and none were found under specs/.")
@@ -103,13 +131,17 @@ class WorkflowOrchestrator:
                         bdd_agent_instance.generate_all(
                             str(swagger_path),
                             controller_source=str(controller_path) if controller_path else None,
+                            user_prompt=user_prompt,
                         )
                     )
             else:
                 if progress_callback:
                     progress_callback("bdd_generation", "Generating BDDs from controller implementation", 0.15)
                 generated_files.extend(
-                    bdd_agent_instance.generate_all(controller_source=str(controller_path) if controller_path else None)
+                    bdd_agent_instance.generate_all(
+                        controller_source=str(controller_path) if controller_path else None,
+                        user_prompt=user_prompt,
+                    )
                 )
 
             generated_paths = [str(Path(path)) for path in generated_files]
@@ -128,7 +160,7 @@ class WorkflowOrchestrator:
                 ),
             }
 
-            if not review_approved:
+            if not review_approved and user_prompt and not all_specs and not swagger_file and not controller_source:
                 workflow["status"] = "review_pending"
                 workflow["steps"]["review"] = {"status": "pending", "message": "User review required before execution."}
                 self.last_run = workflow

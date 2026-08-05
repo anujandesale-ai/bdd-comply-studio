@@ -63,7 +63,7 @@ class BDDAgent:
         path = api_info.get("path", "")
         return api_info.get("method") in {"POST", "PUT", "PATCH"} and ("/accounts" in path or "/customers" in path or "/loans" in path)
 
-    def _build_prerequisite_notes(self, api_info, controller_source=None):
+    def _build_prerequisite_notes(self, api_info, controller_source=None, user_prompt=None):
         notes = []
         if self._requires_cbs_mock(api_info):
             notes.append("Prerequisite: create a CBS mock response before validating this scenario.")
@@ -72,11 +72,14 @@ class BDDAgent:
         if not notes:
             notes.append("Prerequisite: validate the API contract and expected downstream dependency before running the scenario.")
 
-        prompt = (
-            f"You are reviewing generated BDD scenarios for a banking API.\n"
-            f"API: {api_info.get('method')} {api_info.get('path')}\n"
-            f"Controller context: {self._read_controller_context(controller_source)}"
-        )
+        prompt_parts = [
+            "You are reviewing generated BDD scenarios for a banking API.",
+            f"API: {api_info.get('method')} {api_info.get('path')}",
+            f"Controller context: {self._read_controller_context(controller_source)}",
+        ]
+        if user_prompt:
+            prompt_parts.append(f"User request: {user_prompt}")
+        prompt = "\n".join(prompt_parts)
         llm_note = ai_agent._llm_text(prompt, temperature=0.2, max_output_tokens=120)
         if llm_note and llm_note.lower() != "workflow summary generated locally.":
             extra_notes = [line.strip(" -") for line in llm_note.splitlines() if line.strip()][:3]
@@ -278,7 +281,7 @@ class BDDAgent:
         api_info["query_params"] = query_params
         return api_info
 
-    def generate_from_openapi(self, swagger_path, controller_source=None):
+    def generate_from_openapi(self, swagger_path, controller_source=None, user_prompt=None):
         spec = self._load_openapi(swagger_path)
         generated = []
         paths = spec.get("paths", {})
@@ -290,7 +293,7 @@ class BDDAgent:
                 if method == "parameters":
                     continue
                 api_info = self._info_from_operation(path, method.upper(), operation, path_parameters + operation.get("parameters", []))
-                generated.append(self.generate_feature(api_info, controller_source=controller_source))
+                generated.append(self.generate_feature(api_info, controller_source=controller_source, user_prompt=user_prompt))
         return generated
 
     def _build_scenarios(self, api_info):
@@ -338,11 +341,11 @@ class BDDAgent:
         )
         return "\n".join(scenarios)
 
-    def generate_feature(self, api_info, controller_source=None):
+    def generate_feature(self, api_info, controller_source=None, user_prompt=None):
         filename = f"{slugify(api_info['method'] + ' ' + api_info['path'])}.feature"
         feature_path = self.output_dir / filename
         scenarios = self._build_scenarios(api_info)
-        prerequisites = self._build_prerequisite_notes(api_info, controller_source=controller_source)
+        prerequisites = self._build_prerequisite_notes(api_info, controller_source=controller_source, user_prompt=user_prompt)
         description = api_info.get("description", "")
         if prerequisites:
             description = f"{description}\n\nPrerequisites:\n" + "\n".join(f"- {note}" for note in prerequisites)
@@ -356,13 +359,13 @@ class BDDAgent:
         self.ensure_cbs_mock(api_info, output_dir=self.mock_dir)
         return feature_path
 
-    def generate_all(self, swagger_path=None, controller_source=None):
+    def generate_all(self, swagger_path=None, controller_source=None, user_prompt=None):
         if swagger_path:
-            return self.generate_from_openapi(swagger_path, controller_source=controller_source)
+            return self.generate_from_openapi(swagger_path, controller_source=controller_source, user_prompt=user_prompt)
 
         generated_files = []
         for api_info in service.API_DEFINITIONS:
-            generated_files.append(self.generate_feature(api_info, controller_source=controller_source))
+            generated_files.append(self.generate_feature(api_info, controller_source=controller_source, user_prompt=user_prompt))
         return generated_files
 
 

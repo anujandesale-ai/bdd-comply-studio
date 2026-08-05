@@ -96,9 +96,10 @@ def main() -> None:
             .status-text { font-size: 0.95rem; color: #e5e7eb; }
             .animated-status { animation: pulse-status 1.2s ease-in-out infinite; }
             @keyframes pulse-status { 0%, 100% { opacity: 0.85; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-1px); } }
-            .stButton>button { border-radius: 14px; padding: 0.95rem 1.4rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #0ea5e9, #2563eb); border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 18px 40px rgba(15,23,42,0.12); transition: transform 0.18s ease, box-shadow 0.18s ease; }
-            .stButton>button:hover { transform: translateY(-1px); box-shadow: 0 20px 48px rgba(15,23,42,0.18); }
+            .stButton>button { border-radius: 12px; padding: 0.55rem 1rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #38bdf8, #2563eb); border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 10px 24px rgba(37,99,235,0.24); transition: transform 0.18s ease, box-shadow 0.18s ease; }
+            .stButton>button:hover { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(37,99,235,0.28); }
             .stButton>button:disabled { opacity: 0.6; cursor: not-allowed; box-shadow: none; }
+            .prompt-run-button { margin-top: 0.2rem; }
         </style>''',
         unsafe_allow_html=True,
     )
@@ -108,6 +109,62 @@ def main() -> None:
     )
 
     orchestrator = get_orchestrator()
+
+    temp_path = None
+    all_specs = False
+    controller_source = None
+    create_cbs_mock = True
+
+    def run_workflow_once() -> None:
+        st.session_state["review_approved"] = False
+        st.session_state["workflow_running"] = True
+        st.session_state["workflow_current_step"] = "bdd_generation"
+        st.session_state["workflow_progress"] = 0
+        st.session_state["workflow_status_text"] = "Starting workflow"
+        with st.spinner("Generating BDDs and running the full compliance workflow..."):
+            try:
+                progress_box = st.empty()
+
+                def progress_callback(step_name: str, message: str, progress: float) -> None:
+                    st.session_state["workflow_current_step"] = step_name
+                    message_label = {
+                        "workflow": "STEP 0",
+                        "bdd_generation": "STEP 1",
+                        "review": "STEP 2",
+                        "bdd_execution": "STEP 3",
+                        "pii_validation": "STEP 4",
+                        "fca_validation": "STEP 5",
+                    }.get(step_name, step_name.replace("_", " ").title())
+                    progress_box.info(f"{message_label} : {message}")
+                    update_progress(step_name, message, progress)
+
+                result = orchestrator.run_workflow(
+                    swagger_file=temp_path,
+                    review_approved=False,
+                    all_specs=all_specs,
+                    progress_callback=progress_callback,
+                    controller_source=controller_source,
+                    create_cbs_mock=create_cbs_mock,
+                    user_prompt=st.session_state.get("user_bdd_prompt"),
+                )
+            except Exception as exc:  # pragma: no cover - UI safety
+                st.error(f"Workflow failed: {exc}")
+                st.stop()
+
+        st.session_state["last_result"] = result
+        st.session_state["workflow_running"] = False
+        st.session_state["workflow_current_step"] = None
+        st.session_state["workflow_progress"] = 100 if result.get("status") == "completed" else 25
+        st.session_state["workflow_status_text"] = _get_workflow_status_text(result)
+        if result.get("status") == "review_pending":
+            st.info("The workflow paused for review. Open the Review tab to approve it and continue.")
+        elif result.get("status") == "completed":
+            st.success("Workflow completed successfully.")
+        else:
+            st.error("Workflow failed. Review the errors below.")
+            for error in result.get("errors", []):
+                st.write(error)
+        _safe_rerun()
 
     steps = [
         ("bdd_generation", "BDD generation"),
@@ -141,6 +198,36 @@ def main() -> None:
             else f"<div class='status-text'>{friendly_step} : {message}</div>"
         )
         progress_caption.markdown(status_html, unsafe_allow_html=True)
+
+    def continue_workflow_once() -> None:
+        st.session_state["workflow_running"] = True
+        st.session_state["workflow_current_step"] = "bdd_execution"
+        st.session_state["workflow_progress"] = 0
+        st.session_state["workflow_status_text"] = "Continuing workflow after BDD generation"
+        with st.spinner("Executing BDD execution, PII validation, and FCA validation..."):
+            try:
+                result = orchestrator.run_workflow(
+                    swagger_file=temp_path,
+                    review_approved=True,
+                    all_specs=all_specs,
+                    progress_callback=update_progress,
+                    controller_source=controller_source,
+                    create_cbs_mock=create_cbs_mock,
+                    user_prompt=st.session_state.get("user_bdd_prompt"),
+                )
+            except Exception as exc:  # pragma: no cover - UI safety
+                st.error(f"Workflow failed during continuation: {exc}")
+                st.stop()
+        st.session_state["last_result"] = result
+        st.session_state["workflow_running"] = False
+        st.session_state["workflow_current_step"] = None
+        st.session_state["workflow_progress"] = 100 if result.get("status") == "completed" else 25
+        st.session_state["workflow_status_text"] = _get_workflow_status_text(result)
+        if result.get("status") == "completed":
+            st.success("Workflow completed successfully after review.")
+        else:
+            st.error("Workflow did not complete after review.")
+        _safe_rerun()
 
     with st.sidebar:
         st.header("Workflow")
@@ -180,107 +267,93 @@ def main() -> None:
         progress_caption.caption(st.session_state.get("workflow_status_text", f"Workflow completion: {progress_value}%"))
         st.write("Use the controls on the right to upload a spec or run bundled specs, then review and continue the workflow.")
 
-    selected_source = st.session_state.get("bdd_source", "Upload Swagger JSON")
-    if "last_bdd_source" not in st.session_state:
-        st.session_state["last_bdd_source"] = selected_source
-    bdd_source = st.radio(
-        "Source of BDD generation",
-        ["Upload Swagger JSON", "Use all specs under specs/", "Use REST controller implementation"],
-        index=0,
-        key="bdd_source",
-    )
+    ai_mode_tab, other_mode_tab = st.tabs(["AI mode", "Upload Specs"])
 
-    if st.session_state.get("last_bdd_source") != bdd_source:
-        for key in ["last_result", "review_approved", "workflow_progress", "workflow_status_text", "swagger_upload"]:
-            st.session_state.pop(key, None)
-        st.session_state["last_bdd_source"] = bdd_source
+    with ai_mode_tab:
+        st.caption("Describe what you want generated and run the workflow directly.")
+        prompt_col, button_col = st.columns([4, 1])
+        with prompt_col:
+            st.text_area(
+                "Describe what BDDs you want generated",
+                key="user_bdd_prompt",
+                height=120,
+                placeholder="Example: Generate BDDs for the account onboarding API and focus on happy path and validation errors.",
+            )
+        with button_col:
+            st.markdown("<div class='prompt-run-button'>", unsafe_allow_html=True)
+            if st.button(
+                "Run",
+                key="run_prompt_workflow_inline",
+                disabled=not str(st.session_state.get("user_bdd_prompt", "")).strip(),
+                use_container_width=False,
+            ):
+                run_workflow_once()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-    uploaded_file = None
-    temp_path = None
-    all_specs = False
-    controller_source = None
+        if "last_result" in st.session_state:
+            result = st.session_state["last_result"]
+            if result.get("status") == "review_pending":
+                st.info("BDD generation completed. Continue the workflow to execute the remaining stages.")
+                if st.button("Continue workflow", key="continue_workflow_ai", use_container_width=True):
+                    continue_workflow_once()
+            elif result.get("status") == "completed":
+                st.success("Workflow completed successfully.")
 
-    if bdd_source == "Upload Swagger JSON":
-        uploaded_file = st.file_uploader(
-            "Upload OpenAPI/Swagger JSON",
-            type=["json"],
-            accept_multiple_files=False,
-            key="swagger_upload",
+    with other_mode_tab:
+        selected_source = st.session_state.get("bdd_source", "Upload Swagger JSON")
+        if "last_bdd_source" not in st.session_state:
+            st.session_state["last_bdd_source"] = selected_source
+        bdd_source = st.radio(
+            "Source of BDD generation",
+            ["Upload Swagger JSON", "Use all specs under specs/", "Use REST controller implementation"],
+            index=0,
+            key="bdd_source",
         )
-        if uploaded_file is None:
-            st.info("Upload a Swagger/JSON file to start the workflow.")
-            return
-        upload_dir = Path.cwd() / "uploads"
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        dest = upload_dir / uploaded_file.name
-        dest.write_bytes(uploaded_file.getvalue())
-        temp_path = str(dest)
-        st.success(f"Uploaded {uploaded_file.name} for workflow processing.")
-    elif bdd_source == "Use all specs under specs/":
-        all_specs = True
-    else:
-        controller_source = str((Path(__file__).resolve().parent / "backend" / "sample_banking_service.py"))
-        st.info("BDD generation will use the REST controller implementation from sample_banking_service.py.")
 
-    create_cbs_mock = True
+        if st.session_state.get("last_bdd_source") != bdd_source:
+            for key in ["last_result", "review_approved", "workflow_progress", "workflow_status_text", "swagger_upload"]:
+                st.session_state.pop(key, None)
+            st.session_state["last_bdd_source"] = bdd_source
 
-    if "last_result" in st.session_state:
-        st.info("BDDs are generated successfully. Review them in the 'Review generated BDDs' tab before continuing the workflow.")
+        uploaded_file = None
+        temp_path = None
+        all_specs = False
+        controller_source = None
 
-    review_approved = st.session_state.get("review_approved", False)
-    run_full_enabled = uploaded_file is not None or all_specs or controller_source is not None
-    if not run_full_enabled:
-        st.warning("Upload a Swagger spec or choose a source before running the workflow.")
-
-    if st.button("Run full workflow", key="run_full_workflow", disabled=not run_full_enabled):
-        st.session_state["review_approved"] = False
-        st.session_state["workflow_running"] = True
-        st.session_state["workflow_current_step"] = "bdd_generation"
-        st.session_state["workflow_progress"] = 0
-        st.session_state["workflow_status_text"] = "Starting workflow"
-        with st.spinner("Generating BDDs and running the full compliance workflow..."):
-            try:
-                progress_box = st.empty()
-
-                def progress_callback(step_name: str, message: str, progress: float) -> None:
-                    st.session_state["workflow_current_step"] = step_name
-                    message_label = {
-                        "workflow": "STEP 0",
-                        "bdd_generation": "STEP 1",
-                        "review": "STEP 2",
-                        "bdd_execution": "STEP 3",
-                        "pii_validation": "STEP 4",
-                        "fca_validation": "STEP 5",
-                    }.get(step_name, step_name.replace("_", " ").title())
-                    progress_box.info(f"{message_label} : {message}")
-                    update_progress(step_name, message, progress)
-
-                result = orchestrator.run_workflow(
-                    swagger_file=temp_path,
-                    review_approved=False,
-                    all_specs=all_specs,
-                    progress_callback=progress_callback,
-                    controller_source=controller_source,
-                    create_cbs_mock=create_cbs_mock,
-                )
-            except Exception as exc:  # pragma: no cover - UI safety
-                st.error(f"Workflow failed: {exc}")
-                st.stop()
-
-        st.session_state["last_result"] = result
-        st.session_state["workflow_running"] = False
-        st.session_state["workflow_current_step"] = None
-        st.session_state["workflow_progress"] = 100 if result.get("status") == "completed" else 25
-        st.session_state["workflow_status_text"] = _get_workflow_status_text(result)
-        if result.get("status") == "review_pending":
-            st.info("The workflow paused for review. Open the Review tab to approve it and continue.")
-        elif result.get("status") == "completed":
-            st.success("Workflow completed successfully.")
+        if bdd_source == "Upload Swagger JSON":
+            uploaded_file = st.file_uploader(
+                "Upload OpenAPI/Swagger JSON",
+                type=["json"],
+                accept_multiple_files=False,
+                key="swagger_upload",
+            )
+            if uploaded_file is None:
+                st.info("Upload a Swagger/JSON file to start the workflow.")
+                return
+            upload_dir = Path.cwd() / "uploads"
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            dest = upload_dir / uploaded_file.name
+            dest.write_bytes(uploaded_file.getvalue())
+            temp_path = str(dest)
+            st.success(f"Uploaded {uploaded_file.name} for workflow processing.")
+        elif bdd_source == "Use all specs under specs/":
+            all_specs = True
         else:
-            st.error("Workflow failed. Review the errors below.")
-            for error in result.get("errors", []):
-                st.write(error)
-        _safe_rerun()
+            controller_source = str((Path(__file__).resolve().parent / "backend" / "sample_banking_service.py"))
+            st.info("BDD generation will use the REST controller implementation from sample_banking_service.py.")
+
+        create_cbs_mock = True
+
+        if "last_result" in st.session_state:
+            st.info("BDDs are generated successfully. Review them in the 'Review generated BDDs' tab before continuing the workflow.")
+
+        review_approved = st.session_state.get("review_approved", False)
+        run_full_enabled = uploaded_file is not None or all_specs or controller_source is not None
+        if not run_full_enabled:
+            st.warning("Upload a Swagger spec or choose a source before running the workflow.")
+
+        if st.button("Run full workflow", key="run_full_workflow", disabled=not run_full_enabled, use_container_width=True):
+            run_workflow_once()
 
     if st.session_state.get("workflow_status_text"):
         status_text = st.session_state["workflow_status_text"]
@@ -304,36 +377,10 @@ def main() -> None:
         else:
             result = st.session_state["last_result"]
             review_ready = st.session_state.get("review_approved", False) and result.get("status") == "review_pending"
-            if review_ready:
-                st.success("BDDs has been approved. Continue workflow below to execute the remaining stages.")
+            if result.get("status") == "review_pending":
+                st.info("BDD generation completed. Continue the workflow to execute the remaining stages.")
                 if st.button("Continue workflow", key="continue_workflow"):
-                    st.session_state["workflow_running"] = True
-                    st.session_state["workflow_current_step"] = "bdd_execution"
-                    st.session_state["workflow_progress"] = 0
-                    st.session_state["workflow_status_text"] = "Continuing workflow after review"
-                    with st.spinner("Executing BDD execution, PII validation, and FCA validation..."):
-                        try:
-                            result = orchestrator.run_workflow(
-                                swagger_file=temp_path,
-                                review_approved=True,
-                                all_specs=all_specs,
-                                progress_callback=update_progress,
-                                controller_source=controller_source,
-                                create_cbs_mock=create_cbs_mock,
-                            )
-                        except Exception as exc:  # pragma: no cover - UI safety
-                            st.error(f"Workflow failed during continuation: {exc}")
-                            st.stop()
-                    st.session_state["last_result"] = result
-                    st.session_state["workflow_running"] = False
-                    st.session_state["workflow_current_step"] = None
-                    st.session_state["workflow_progress"] = 100 if result.get("status") == "completed" else 25
-                    st.session_state["workflow_status_text"] = _get_workflow_status_text(result)
-                    if result.get("status") == "completed":
-                        st.success("Workflow completed successfully after review.")
-                    else:
-                        st.error("Workflow did not complete after review.")
-                    _safe_rerun()
+                    continue_workflow_once()
 
             if result.get("status") == "completed":
                 if result.get("steps", {}).get("bdd_execution"):
