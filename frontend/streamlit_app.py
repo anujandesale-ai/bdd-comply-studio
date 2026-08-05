@@ -282,7 +282,7 @@ def main() -> None:
             result = st.session_state["last_result"]
             review_ready = st.session_state.get("review_approved", False) and result.get("status") == "review_pending"
             if review_ready:
-                st.success("Review has been approved. Continue workflow below to execute the remaining stages.")
+                st.success("BDDs has been approved. Continue workflow below to execute the remaining stages.")
                 if st.button("Continue workflow", key="continue_workflow"):
                     st.session_state["workflow_running"] = True
                     st.session_state["workflow_current_step"] = "bdd_execution"
@@ -372,7 +372,7 @@ def main() -> None:
                 if st.button("Approve Review and return to workflow", key="approve_and_continue", use_container_width=True):
                     st.session_state["review_approved"] = True
                     st.session_state["workflow_progress"] = 0
-                    st.session_state["workflow_status_text"] = "Review approved. Returning to Workflow tab."
+                    st.session_state["workflow_status_text"] = "BDDs approved. Returning to Workflow tab."
                     last_result = st.session_state.get("last_result")
                     if last_result and last_result.get("steps", {}).get("review"):
                         last_result["steps"]["review"]["status"] = "completed"
