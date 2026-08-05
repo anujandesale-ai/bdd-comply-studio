@@ -53,6 +53,29 @@ def _get_step_state(last_result: dict | None, step_name: str, review_approved: b
     current = not completed and status in {"running", "pending", "review_pending"}
     return completed, current
 
+def _get_workflow_status_text(last_result: dict | None) -> str:
+    if not last_result:
+        return "Review required"
+    if last_result.get("status") != "completed":
+        return "Review required"
+
+    bdd_results = last_result.get("steps", {}).get("bdd_execution", {}).get("results", [])
+    if not bdd_results:
+        return "Workflow completed"
+
+    passed = 0
+    failed = 0
+    for feature in bdd_results:
+        scenarios = feature.get("scenarios", []) or []
+        if not scenarios:
+            failed += 1
+            continue
+        if all(scenario.get("passed", False) for scenario in scenarios):
+            passed += 1
+        else:
+            failed += 1
+
+    return f"Workflow completed. BDDs success/failed: {passed}/{failed}"
 
 def main() -> None:
     st.set_page_config(page_title="Compliance BDDs AI Studio", layout="wide")
@@ -202,7 +225,7 @@ def main() -> None:
     create_cbs_mock = True
 
     if "last_result" in st.session_state:
-        st.info("A previous workflow run is available below. Upload a new spec or run the workflow again to refresh state.")
+        st.info("BDDs are generated successfully. Review them in the 'Review generated BDDs' tab before continuing the workflow.")
 
     review_approved = st.session_state.get("review_approved", False)
     run_full_enabled = uploaded_file is not None or all_specs or controller_source is not None
@@ -248,7 +271,7 @@ def main() -> None:
         st.session_state["workflow_running"] = False
         st.session_state["workflow_current_step"] = None
         st.session_state["workflow_progress"] = 100 if result.get("status") == "completed" else 25
-        st.session_state["workflow_status_text"] = "Workflow completed" if result.get("status") == "completed" else "Review required"
+        st.session_state["workflow_status_text"] = _get_workflow_status_text(result)
         if result.get("status") == "review_pending":
             st.info("The workflow paused for review. Open the Review tab to approve it and continue.")
         elif result.get("status") == "completed":
@@ -305,7 +328,7 @@ def main() -> None:
                     st.session_state["workflow_running"] = False
                     st.session_state["workflow_current_step"] = None
                     st.session_state["workflow_progress"] = 100 if result.get("status") == "completed" else 25
-                    st.session_state["workflow_status_text"] = "Workflow completed" if result.get("status") == "completed" else "Review required"
+                    st.session_state["workflow_status_text"] = _get_workflow_status_text(result)
                     if result.get("status") == "completed":
                         st.success("Workflow completed successfully after review.")
                     else:
@@ -371,14 +394,17 @@ def main() -> None:
             with button_col:
                 if st.button("Approve Review and return to workflow", key="approve_and_continue", use_container_width=True):
                     st.session_state["review_approved"] = True
+                    st.session_state["review_status_message"] = "BDDs approved. Return to Workflow tab."
                     st.session_state["workflow_progress"] = 0
-                    st.session_state["workflow_status_text"] = "BDDs approved. Returning to Workflow tab."
                     last_result = st.session_state.get("last_result")
                     if last_result and last_result.get("steps", {}).get("review"):
                         last_result["steps"]["review"]["status"] = "completed"
                         last_result["steps"]["review"]["message"] = "User review approved. Ready to continue."
                         st.session_state["last_result"] = last_result
                     _safe_rerun()
+
+            if st.session_state.get("review_status_message"):
+                st.success(st.session_state["review_status_message"])
 
             if result.get("steps", {}).get("bdd_generation"):
                 generated_files = result["steps"]["bdd_generation"].get("generated_files", [])
